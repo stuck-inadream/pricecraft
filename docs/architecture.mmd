@@ -1,0 +1,40 @@
+flowchart TD
+    A[Next.js 15 UI] -->|convex react hooks| B[Convex]
+    subgraph Convex
+      B1[crawls.addTarget]
+      B2[crawls.runCrawl]
+      B3[crawls.fetchAndParse]
+      B4[crawls._insertRun]
+      B5[crawls._insertFinding]
+      B6[experiments.generateProposals]
+      B7[experiments.proposeExperiment]
+      B8[experiments.acceptProposal]
+      B9[impacts.recordSnapshot]
+      B10[impacts.listRecent]
+      B11[auth.me]
+      B12[auth.ensureDevUser]
+    end
+
+    subgraph Storage
+      S1[(orgs)]
+      S2[(users)]
+      S3[(crawlTargets)]
+      S4[(crawlRuns)]
+      S5[(priceFindings)]
+      S6[(experiments)]
+      S7[(impactSnapshots)]
+    end
+
+    A --> B11
+    A --> B12
+    A --> B1 --> S3
+    A --> B2 --> B3 --> B4 --> S4
+    B2 --> B5 --> S5
+    A --> B7 --> S6
+    B7 --> B6
+    A --> B8 --> S6
+    A --> B9 --> S7
+    A --> B10 --> S7
+
+    classDef store fill:#222,stroke:#999,color:#eee;
+    class S1,S2,S3,S4,S5,S6,S7 store;
