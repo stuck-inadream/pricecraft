@@ -43,3 +43,9 @@ next-env.d.ts
 node_modules
 .env.local
 .vercel
+.next
+node_modules
+.venv
+.vercel
+.env.local
+.DS_Store
