@@ -27,8 +27,7 @@ function useMaybeArrayQuery<T>(
 
 export default function Page() {
   // Prefer env var, fallback keeps the demo working locally
-  const devEmail =
-    process.env.NEXT_PUBLIC_DEV_EMAIL || "sarandahalitaj@gmail.com";
+  const devEmail = process.env.NEXT_PUBLIC_DEV_EMAIL || "sarandahalitaj@gmail.com";
 
   // me query, driven by a local bump to force refetch after creating the dev user
   const [meBump, setMeBump] = React.useState(0);
@@ -65,6 +64,7 @@ export default function Page() {
   const proposeExperiment = useAction(api.experiments.proposeExperiment as any);
   const acceptProposal = useMutation(api.experiments.acceptProposal as any);
   const recordImpact = useMutation(api.impacts.recordSnapshot as any);
+  const sendAccepted = useAction(api.emails.sendProposalAcceptedEmail as any);
 
   // local ui state
   const [proposals, setProposals] = React.useState<any[] | null>(null);
@@ -244,6 +244,19 @@ export default function Page() {
                           mrrDelta: 100,
                           notes: "Seed",
                         } as any);
+
+                        // send email via Resend (Convex action)
+                        await sendAccepted({
+                          to: process.env.NEXT_PUBLIC_DEV_EMAIL || "sarandahalitaj@gmail.com",
+                          title: p?.title ?? "Accepted proposal",
+                          metric: p?.metric ?? "MRR",
+                          delta: 100,
+                          appUrl:
+                            typeof window !== "undefined"
+                              ? window.location.origin
+                              : "https://pricecraft.vercel.app",
+                        } as any);
+
                         setProposals(null);
                       }}
                     >
