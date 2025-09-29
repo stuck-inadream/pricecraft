@@ -4,11 +4,17 @@ import React from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
+// Only show the debug box when running locally
+const showDebug =
+  typeof window !== "undefined" && window.location.hostname === "localhost";
+
+/* ---------- light types ---------- */
 type MeLite = { _id?: string; orgId?: string | null; org?: { _id?: string } | null };
 type FindingRow = { _id: string; url: string; label: string; findings: any; startedAt: number };
 type ExperimentRow = { _id: string; name: string; status: string; payload: any; createdAt: number };
 type ImpactRow = { _id: string; experimentId: string; mrrDelta: number; notes: string; at: number };
 
+/* ---------- helper: optional query ---------- */
 function useMaybeArrayQuery<T>(
   q: any,
   enabled: boolean,
@@ -19,14 +25,10 @@ function useMaybeArrayQuery<T>(
   return data;
 }
 
-// Hide debug in production (works on Vercel and locally)
-const isProd =
-  process.env.NEXT_PUBLIC_VERCEL_ENV === "production" ||
-  process.env.NODE_ENV === "production";
-
 export default function Page() {
-  // Dev path: hardcode your email so auth.me resolves
-  const devEmail = "sarandahalitaj@gmail.com";
+  // Prefer env var, fallback keeps the demo working locally
+  const devEmail =
+    process.env.NEXT_PUBLIC_DEV_EMAIL || "sarandahalitaj@gmail.com";
 
   // me query, driven by a local bump to force refetch after creating the dev user
   const [meBump, setMeBump] = React.useState(0);
@@ -80,8 +82,7 @@ export default function Page() {
       const res = await ensureDevUser({ email: devEmail, name: "Dev User" } as any);
       if (res && res._id) {
         setBootMsg("Dev user created");
-        // bump me to retrigger useQuery
-        setMeBump((n) => n + 1);
+        setMeBump((n) => n + 1); // retrigger useQuery
       } else {
         setBootMsg("Created, but could not load user. Check convex dev logs.");
         setMeBump((n) => n + 1);
@@ -102,149 +103,184 @@ export default function Page() {
     const [localBusy, setLocalBusy] = React.useState(false);
 
     return (
-      <main style={{ padding: 16, maxWidth: 960, margin: "0 auto" }}>
-        {/* Debug (hidden on production) */}
-        {!isProd && (
-          <details style={{ marginBottom: 12, fontSize: 12 }}>
-            <summary>Debug</summary>
-            <pre style={{ whiteSpace: "pre-wrap" }}>
-              {JSON.stringify(
-                {
-                  me,
-                  derived: { userId, orgId, hasOrg: Boolean(orgId) },
-                  counts: {
-                    findings: findings.length,
-                    experiments: experiments.length,
-                    impacts: impacts.length,
-                  },
-                },
-                null,
-                2
-              )}
-            </pre>
-          </details>
-        )}
-    
-        {/* Dev setup if me is missing or orgId is empty */}
-        {(!me || !orgId) && (
-          <section style={{ marginTop: 8, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
-            <h3>Dev setup</h3>
-            <p>Create a dev org and user for {devEmail}</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={handleCreateDevUser} disabled={bootBusy}>
-                {bootBusy ? "Creating…" : "Create dev user"}
-              </button>
-              {bootMsg && <span>{bootMsg}</span>}
-            </div>
-            <p style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-              If nothing happens, make sure both processes are running and up to date —
-              <code>npx convex dev</code> in one terminal and <code>npm run dev</code> in another. Restart
-              both after schema or server changes.
-            </p>
-          </section>
-        )}
-    
-        {/* Only render the main app once orgId is present */}
-        {orgId ? (
-          <>
-            <AddTarget orgId={orgId} />
-    
-            <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
-              <h3>Findings</h3>
-              <ul style={{ marginTop: 12 }}>
-                {findings.map((row) => (
-                  <li key={row._id} style={{ marginBottom: 12 }}>
-                    <div>
-                      <strong>{row.label || "Competitor"}</strong> {row.url}
-                    </div>
-                    <details style={{ marginTop: 6 }}>
-                      <summary>Details</summary>
-                      <pre style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
-                        {JSON.stringify(row.findings, null, 2)}
-                      </pre>
-                    </details>
-                  </li>
-                ))}
-                {findings.length === 0 && <li>No findings yet</li>}
-              </ul>
-            </section>
-    
-            <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
-              <h3>Experiment ideas</h3>
-              <button
-                disabled={!orgId || busy}
-                onClick={async () => {
-                  if (!orgId) return;
-                  setBusy(true);
-                  try {
-                    const res = await proposeExperiment({ orgId } as any);
-                    setProposals(res?.proposals ?? []);
-                    setExpId(res?._id ?? null);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {busy ? "Proposing…" : "Propose from latest finding"}
-              </button>
-    
-              {proposals && (
-                <ul style={{ marginTop: 12 }}>
-                  {proposals.map((p: any, i: number) => (
-                    <li key={i} style={{ marginBottom: 8 }}>
-                      <div><strong>{p.title}</strong></div>
-                      <div>Hypothesis {p.hypothesis}</div>
-                      <div>Metric {p.metric}</div>
-                      <div>Action {p.action}</div>
-                      <button
-                        style={{ marginTop: 6 }}
-                        disabled={!expId}
-                        onClick={async () => {
-                          if (!expId) return;
-                          await acceptProposal({ experimentId: expId as any, index: i });
-                          await recordImpact({
-                            orgId,
-                            experimentId: expId,
-                            mrrDelta: 100,
-                            notes: "Seed",
-                          } as any);
-                          setProposals(null);
-                        }}
-                      >
-                        Accept
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-    
-            <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
-              <h3>Recent proposals</h3>
-              <ul style={{ marginTop: 8 }}>
-                {experiments.map((e) => (
-                  <li key={e._id} style={{ marginBottom: 8 }}>
-                    <div><strong>{e.name}</strong> · {e.status}</div>
-                  </li>
-                ))}
-                {experiments.length === 0 && <li>No proposals yet</li>}
-              </ul>
-            </section>
-    
-            <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
-              <h3>Impact</h3>
-              <ul style={{ marginTop: 8 }}>
-                {impacts.map((i) => (
-                  <li key={i._id} style={{ marginBottom: 8 }}>
-                    <div>MRR delta ${i.mrrDelta} · {new Date(i.at).toLocaleString()}</div>
-                    <div>{i.notes}</div>
-                  </li>
-                ))}
-                {impacts.length === 0 && <li>No impact snapshots yet</li>}
-              </ul>
-            </section>
-          </>
-        ) : null}
-      </main>
+      <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+        <h3>Add target and crawl</h3>
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <input
+            placeholder="https://competitor.com/pricing"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <input
+            placeholder="Competitor name"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            style={{ width: 220 }}
+          />
+          <button
+            disabled={!orgId || !url || localBusy}
+            onClick={async () => {
+              setLocalBusy(true);
+              try {
+                const t = await addTarget({ orgId, url, label } as any);
+                await runCrawl({ targetId: t._id } as any);
+                setUrl("");
+                setLabel("");
+              } finally {
+                setLocalBusy(false);
+              }
+            }}
+          >
+            {localBusy ? "Crawling…" : "Add and crawl"}
+          </button>
+        </div>
+      </section>
     );
-    
+  }
+
+  return (
+    <main style={{ padding: 16, maxWidth: 960, margin: "0 auto" }}>
+      {showDebug && (
+        <details style={{ marginBottom: 12, fontSize: 12 }}>
+          <summary>Debug</summary>
+          <pre style={{ whiteSpace: "pre-wrap" }}>
+            {JSON.stringify(
+              {
+                me,
+                derived: { userId, orgId, hasOrg: Boolean(orgId) },
+                counts: {
+                  findings: findings.length,
+                  experiments: experiments.length,
+                  impacts: impacts.length,
+                },
+              },
+              null,
+              2
+            )}
+          </pre>
+        </details>
+      )}
+
+      {/* Dev setup if me is missing or orgId is empty */}
+      {(!me || !orgId) && (
+        <section style={{ marginTop: 8, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+          <h3>Dev setup</h3>
+          <p>Create a dev org and user for {devEmail}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={handleCreateDevUser} disabled={bootBusy}>
+              {bootBusy ? "Creating…" : "Create dev user"}
+            </button>
+            {bootMsg && <span>{bootMsg}</span>}
+          </div>
+          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
+            If nothing happens, run <code>npx convex dev</code> and <code>npm run dev</code> in two terminals,
+            then restart both after schema/server changes.
+          </p>
+        </section>
+      )}
+
+      {/* Main app */}
+      {orgId ? (
+        <>
+          <AddTarget orgId={orgId} />
+
+          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            <h3>Findings</h3>
+            <ul style={{ marginTop: 12 }}>
+              {findings.map((row) => (
+                <li key={row._id} style={{ marginBottom: 12 }}>
+                  <div>
+                    <strong>{row.label || "Competitor"}</strong> {row.url}
+                  </div>
+                  <details style={{ marginTop: 6 }}>
+                    <summary>Details</summary>
+                    <pre style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
+                      {JSON.stringify(row.findings, null, 2)}
+                    </pre>
+                  </details>
+                </li>
+              ))}
+              {findings.length === 0 && <li>No findings yet</li>}
+            </ul>
+          </section>
+
+          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            <h3>Experiment ideas</h3>
+            <button
+              disabled={!orgId || busy}
+              onClick={async () => {
+                if (!orgId) return;
+                setBusy(true);
+                try {
+                  const res = await proposeExperiment({ orgId } as any);
+                  setProposals(res?.proposals ?? []);
+                  setExpId(res?._id ?? null);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? "Proposing…" : "Propose from latest finding"}
+            </button>
+
+            {proposals && (
+              <ul style={{ marginTop: 12 }}>
+                {proposals.map((p: any, i: number) => (
+                  <li key={i} style={{ marginBottom: 8 }}>
+                    <div><strong>{p.title}</strong></div>
+                    <div>Hypothesis {p.hypothesis}</div>
+                    <div>Metric {p.metric}</div>
+                    <div>Action {p.action}</div>
+                    <button
+                      style={{ marginTop: 6 }}
+                      disabled={!expId}
+                      onClick={async () => {
+                        if (!expId) return;
+                        await acceptProposal({ experimentId: expId as any, index: i });
+                        await recordImpact({
+                          orgId,
+                          experimentId: expId,
+                          mrrDelta: 100,
+                          notes: "Seed",
+                        } as any);
+                        setProposals(null);
+                      }}
+                    >
+                      Accept
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            <h3>Recent proposals</h3>
+            <ul style={{ marginTop: 8 }}>
+              {experiments.map((e) => (
+                <li key={e._id} style={{ marginBottom: 8 }}>
+                  <div><strong>{e.name}</strong> · {e.status}</div>
+                </li>
+              ))}
+              {experiments.length === 0 && <li>No proposals yet</li>}
+            </ul>
+          </section>
+
+          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            <h3>Impact</h3>
+            <ul style={{ marginTop: 8 }}>
+              {impacts.map((i) => (
+                <li key={i._id} style={{ marginBottom: 8 }}>
+                  <div>MRR delta ${i.mrrDelta} · {new Date(i.at).toLocaleString()}</div>
+                  <div>{i.notes}</div>
+                </li>
+              ))}
+              {impacts.length === 0 && <li>No impact snapshots yet</li>}
+            </ul>
+          </section>
+        </>
+      ) : null}
+    </main>
+  );
+}
