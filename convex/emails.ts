@@ -1,6 +1,6 @@
 // convex/emails.ts
-import { action } from "./_generated/server";
 import { v } from "convex/values";
+import { action } from "./_generated/server";
 
 export const sendProposalAcceptedEmail = action({
   args: {
@@ -12,17 +12,20 @@ export const sendProposalAcceptedEmail = action({
   },
   handler: async (ctx, { to, title, metric, delta, appUrl }) => {
     const key = process.env.RESEND_API_KEY;
-    if (!key) return { ok: false, reason: "missing_key" as const };
+    if (!key) {
+      console.log("sendProposalAcceptedEmail: missing RESEND_API_KEY");
+      return { ok: false, reason: "missing_key" } as const;
+    }
 
     const html = `
       <div style="font-family:ui-sans-serif;line-height:1.5">
         <h2 style="margin:0 0 8px">Proposal accepted</h2>
         <p style="margin:0 0 4px"><b>${title}</b></p>
         <p style="margin:0 0 4px">Metric: ${metric}</p>
-        <p style="margin:0 0 12px">Seed MRR delta: $${delta}</p>
+        <p style="margin:0 12px">Seed MRR delta: $${delta}</p>
         <a href="${appUrl ?? "https://pricecraft.vercel.app"}"
-           style="display:inline-block;background:#5b7cfa;color:#fff;padding:8px 12px;border-radius:6px;text-decoration:none">
-           Open Pricecraft
+           style="display:inline-block;background:#5b7cfa;color:#fff;padding:8px 12px;border-radius:8px;text-decoration:none">
+          Open Pricecraft
         </a>
       </div>
     `;
@@ -35,13 +38,18 @@ export const sendProposalAcceptedEmail = action({
       },
       body: JSON.stringify({
         from: "Pricecraft <onboarding@resend.dev>",
-        to: [to],
-        subject: `Proposal accepted: ${title}`,
+        to,
+        subject: "Pricecraft: proposal accepted",
         html,
       }),
     });
 
-    if (!res.ok) return { ok: false as const, reason: "send_failed" as const };
-    return { ok: true as const };
+    const text = await res.text();
+    console.log("Resend response", res.status, text);
+
+    if (!res.ok) {
+      return { ok: false, reason: `resend_${res.status}`, body: text } as const;
+    }
+    return { ok: true } as const;
   },
 });

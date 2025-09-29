@@ -232,12 +232,17 @@ export default function Page() {
                     <div>Hypothesis {p.hypothesis}</div>
                     <div>Metric {p.metric}</div>
                     <div>Action {p.action}</div>
+
                     <button
                       style={{ marginTop: 6 }}
                       disabled={!expId}
                       onClick={async () => {
                         if (!expId) return;
+
+                        // 1) accept in Convex
                         await acceptProposal({ experimentId: expId as any, index: i });
+
+                        // 2) record a seed impact
                         await recordImpact({
                           orgId,
                           experimentId: expId,
@@ -245,8 +250,8 @@ export default function Page() {
                           notes: "Seed",
                         } as any);
 
-                        // send email via Resend (Convex action)
-                        await sendAccepted({
+                        // 3) send email via Convex action -> Resend
+                        const r = await sendAccepted({
                           to: process.env.NEXT_PUBLIC_DEV_EMAIL || "sarandahalitaj@gmail.com",
                           title: p?.title ?? "Accepted proposal",
                           metric: p?.metric ?? "MRR",
@@ -256,6 +261,16 @@ export default function Page() {
                               ? window.location.origin
                               : "https://pricecraft.vercel.app",
                         } as any);
+
+                        if (!r?.ok) {
+                          alert(
+                            `Email failed: ${r?.reason ?? "unknown"}${
+                              r?.body ? `\n${r.body}` : ""
+                            }`
+                          );
+                        } else {
+                          alert("Email sent ✅");
+                        }
 
                         setProposals(null);
                       }}
