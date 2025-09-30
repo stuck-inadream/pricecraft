@@ -234,49 +234,73 @@ export default function Page() {
                     <div>Action {p.action}</div>
 
                     <button
-                      style={{ marginTop: 6 }}
-                      disabled={!expId}
-                      onClick={async () => {
-                        if (!expId) return;
+  style={{ marginTop: 6 }}
+  disabled={!expId}
+  onClick={async () => {
+    if (!expId) {
+      alert("No experiment id yet—click “Propose…” first.");
+      return;
+    }
 
-                        // 1) accept in Convex
-                        await acceptProposal({ experimentId: expId as any, index: i });
+    let acceptOk = false;
+    let impactOk = false;
+    let emailResult: any = null;
 
-                        // 2) record a seed impact
-                        await recordImpact({
-                          orgId,
-                          experimentId: expId,
-                          mrrDelta: 100,
-                          notes: "Seed",
-                        } as any);
+    try {
+      // 1) accept in Convex
+      await acceptProposal({ experimentId: expId as any, index: i });
+      acceptOk = true;
+    } catch (e: any) {
+      console.error("acceptProposal failed", e);
+      alert(`acceptProposal failed: ${e?.message ?? String(e)}`);
+    }
 
-                        // 3) send email via Convex action -> Resend
-                        const r = await sendAccepted({
-                          to: process.env.NEXT_PUBLIC_DEV_EMAIL || "sarandahalitaj@gmail.com",
-                          title: p?.title ?? "Accepted proposal",
-                          metric: p?.metric ?? "MRR",
-                          delta: 100,
-                          appUrl:
-                            typeof window !== "undefined"
-                              ? window.location.origin
-                              : "https://pricecraft.vercel.app",
-                        } as any);
+    try {
+      // 2) record a seed impact (don’t block email if this fails)
+      await recordImpact({
+        orgId,
+        experimentId: expId,
+        mrrDelta: 100,
+        notes: "Seed",
+      } as any);
+      impactOk = true;
+    } catch (e: any) {
+      console.error("recordImpact failed", e);
+      // keep going
+    }
 
-                        if (!r?.ok) {
-                          alert(
-                            `Email failed: ${r?.reason ?? "unknown"}${
-                              r?.body ? `\n${r.body}` : ""
-                            }`
-                          );
-                        } else {
-                          alert("Email sent ✅");
-                        }
+    try {
+      // 3) send email via Convex action -> Resend
+      emailResult = await sendAccepted({
+        to: devEmail, // <= ALWAYS send to your resolved email
+        title: p?.title ?? "Accepted proposal",
+        metric: p?.metric ?? "MRR",
+        delta: 100,
+        appUrl:
+          typeof window !== "undefined"
+            ? window.location.origin
+            : "https://pricecraft.vercel.app",
+      } as any);
+    } catch (e: any) {
+      emailResult = { ok: false, reason: `throw: ${e?.message ?? String(e)}` };
+    }
 
-                        setProposals(null);
-                      }}
-                    >
-                      Accept
-                    </button>
+    // Summarize outcome
+    const msg = [
+      `accept: ${acceptOk ? "ok" : "failed"}`,
+      `impact: ${impactOk ? "ok" : "failed"}`,
+      `email: ${emailResult?.ok ? "ok" : `failed (${emailResult?.reason ?? "unknown"})`}`,
+      emailResult?.body ? `\n${emailResult.body}` : "",
+    ].join(" | ");
+
+    alert(msg);
+
+    if (acceptOk) setProposals(null);
+  }}
+>
+  Accept
+</button>
+
                   </li>
                 ))}
               </ul>
