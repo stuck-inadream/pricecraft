@@ -10,7 +10,11 @@
   --border: #1b1b1b;
 }
 
-body { font-family: ui-sans-serif, system-ui, Segoe UI, Inter, Arial; background: var(--bg); color: var(--fg); }
+body {
+  font-family: ui-sans-serif, system-ui, Segoe UI, Inter, Arial;
+  background: var(--bg);
+  color: var(--fg);
+}
 
 button {
   background: var(--primary);
@@ -32,9 +36,21 @@ input {
   color: var(--fg);
   padding: 8px 10px;
 }
+
 section {
   background: #0f0f0f;
   border: 1px solid var(--border);
   border-radius: 12px;
 }
-h3 { margin: 0; font-size: 14px; letter-spacing: .2px; }
+
+h3 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: .2px;
+}
+
+/* Utility buttons / chips (used by page.tsx) */
+.btn { padding: 8px 12px; border: 1px solid #2a2a2a; background: #1a1a1a; color: #eee; border-radius: 8px; }
+.btn:disabled { opacity: .6; }
+.btn-ghost { background: transparent; border: 1px solid #333; color: #bbb; }
+.chip { font-size: 12px; opacity: .8; }
