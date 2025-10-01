@@ -4,10 +4,6 @@ import React from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-// Only show the debug box when running locally
-const showDebug =
-  typeof window !== "undefined" && window.location.hostname === "localhost";
-
 /* ---------- light types ---------- */
 type MeLite = { _id?: string; orgId?: string | null; org?: { _id?: string } | null };
 type FindingRow = { _id: string; url: string; label: string; findings: any; startedAt: number };
@@ -25,9 +21,44 @@ function useMaybeArrayQuery<T>(
   return data;
 }
 
+/* ---------- tiny UI helpers ---------- */
+const btnStyle: React.CSSProperties = {
+  background: "#2a2a2a",
+  color: "#eaeaea",
+  padding: "8px 12px",
+  borderRadius: 8,
+  border: "1px solid #3a3a3a",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const btnDisabled: React.CSSProperties = {
+  opacity: 0.6,
+  cursor: "not-allowed",
+};
+
+const panelStyle: React.CSSProperties = {
+  marginTop: 16,
+  padding: 12,
+  border: "1px solid #2b2b2b",
+  borderRadius: 8,
+};
+
+/* ========================================================= */
+
 export default function Page() {
   // Prefer env var, fallback keeps the demo working locally
   const devEmail = process.env.NEXT_PUBLIC_DEV_EMAIL || "sarandahalitaj@gmail.com";
+
+  // --- fix hydration issues: derive "showDebug" after mount ---
+  const [showDebug, setShowDebug] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      setShowDebug(window.location.hostname === "localhost");
+    } catch {
+      setShowDebug(false);
+    }
+  }, []);
 
   // me query, driven by a local bump to force refetch after creating the dev user
   const [meBump, setMeBump] = React.useState(0);
@@ -71,6 +102,13 @@ export default function Page() {
   const [expId, setExpId] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
+  // per-proposal delta controls
+  const [deltas, setDeltas] = React.useState<Record<number, number>>({});
+
+  // "remove" findings for a clean demo (client-side hide only)
+  const [hiddenFindingIds, setHiddenFindingIds] = React.useState<Set<string>>(new Set());
+  const hideFinding = (id: string) => setHiddenFindingIds((prev) => new Set([...prev, id]));
+
   // dev setup state
   const [bootBusy, setBootBusy] = React.useState(false);
   const [bootMsg, setBootMsg] = React.useState<string | null>(null);
@@ -103,7 +141,7 @@ export default function Page() {
     const [localBusy, setLocalBusy] = React.useState(false);
 
     return (
-      <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+      <section style={panelStyle}>
         <h3>Add target and crawl</h3>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <input
@@ -119,6 +157,7 @@ export default function Page() {
             style={{ width: 220 }}
           />
           <button
+            style={{ ...btnStyle, ...(localBusy || !orgId || !url ? btnDisabled : {}) }}
             disabled={!orgId || !url || localBusy}
             onClick={async () => {
               setLocalBusy(true);
@@ -164,11 +203,15 @@ export default function Page() {
 
       {/* Dev setup if me is missing or orgId is empty */}
       {(!me || !orgId) && (
-        <section style={{ marginTop: 8, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+        <section style={panelStyle}>
           <h3>Dev setup</h3>
           <p>Create a dev org and user for {devEmail}</p>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button onClick={handleCreateDevUser} disabled={bootBusy}>
+            <button
+              style={{ ...btnStyle, ...(bootBusy ? btnDisabled : {}) }}
+              onClick={handleCreateDevUser}
+              disabled={bootBusy}
+            >
               {bootBusy ? "Creating…" : "Create dev user"}
             </button>
             {bootMsg && <span>{bootMsg}</span>}
@@ -185,29 +228,56 @@ export default function Page() {
         <>
           <AddTarget orgId={orgId} />
 
-          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+          {/* Findings (with per-row hide “×”) */}
+          <section style={panelStyle}>
             <h3>Findings</h3>
             <ul style={{ marginTop: 12 }}>
-              {findings.map((row) => (
-                <li key={row._id} style={{ marginBottom: 12 }}>
-                  <div>
+              {findings
+                .filter((row) => !hiddenFindingIds.has(row._id))
+                .map((row) => (
+                  <li key={row._id} style={{ marginBottom: 12, position: "relative" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 28 }}>
                     <strong>{row.label || "Competitor"}</strong> {row.url}
                   </div>
-                  <details style={{ marginTop: 6 }}>
-                    <summary>Details</summary>
-                    <pre style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
-                      {JSON.stringify(row.findings, null, 2)}
-                    </pre>
-                  </details>
-                </li>
-              ))}
-              {findings.length === 0 && <li>No findings yet</li>}
+                
+                  <button
+                    aria-label="Hide this finding"
+                    title="Hide this finding"
+                    onClick={() => hideFinding(row._id)}
+                    style={{
+                      position: "absolute",
+                      top: 6,
+                      right: 6,
+                      width: 24,
+                      height: 24,
+                      borderRadius: 8,
+                      background: "#2a2a2a",
+                      border: "1px solid #3a3a3a",
+                      color: "#e6e6e6",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      lineHeight: 1,
+                      fontSize: 14,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ×
+                  </button>
+                  …
+                </li>                
+                ))}
+              {findings.filter((r) => !hiddenFindingIds.has(r._id)).length === 0 && (
+                <li>No findings yet</li>
+              )}
             </ul>
           </section>
 
-          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+          {/* Proposals */}
+          <section style={panelStyle}>
             <h3>Experiment ideas</h3>
             <button
+              style={{ ...btnStyle, ...(busy || !orgId ? btnDisabled : {}) }}
               disabled={!orgId || busy}
               onClick={async () => {
                 if (!orgId) return;
@@ -227,87 +297,108 @@ export default function Page() {
             {proposals && (
               <ul style={{ marginTop: 12 }}>
                 {proposals.map((p: any, i: number) => (
-                  <li key={i} style={{ marginBottom: 8 }}>
+                  <li key={i} style={{ marginBottom: 14 }}>
                     <div><strong>{p.title}</strong></div>
                     <div>Hypothesis {p.hypothesis}</div>
                     <div>Metric {p.metric}</div>
                     <div>Action {p.action}</div>
 
+                    {/* per-proposal MRR delta */}
+                    <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                      <label style={{ fontSize: 12, opacity: 0.8, minWidth: 64 }}>MRR delta</label>
+                      <input
+                        type="number"
+                        min={-10000}
+                        max={100000}
+                        step={10}
+                        value={Number.isFinite(deltas[i]) ? deltas[i] : (typeof p?.delta === "number" ? p.delta : 100)}
+                        onChange={(e) =>
+                          setDeltas((prev) => ({ ...prev, [i]: Number(e.target.value || 0) }))
+                        }
+                        style={{ width: 120 }}
+                      />
+                    </div>
+
                     <button
-  style={{ marginTop: 6 }}
-  disabled={!expId}
-  onClick={async () => {
-    if (!expId) {
-      alert("No experiment id yet—click “Propose…” first.");
-      return;
-    }
+                      style={{
+                        ...btnStyle,
+                        marginTop: 6,
+                        ...( !expId ? btnDisabled : {} ),
+                      }}
+                      disabled={!expId}
+                      onClick={async () => {
+                        if (!expId) {
+                          alert("No experiment id yet—click “Propose…” first.");
+                          return;
+                        }
 
-    let acceptOk = false;
-    let impactOk = false;
-    let emailResult: any = null;
+                        const delta =
+                          Number.isFinite(deltas[i])
+                            ? deltas[i]
+                            : (typeof p?.delta === "number" ? p.delta : 100);
 
-    try {
-      // 1) accept in Convex
-      await acceptProposal({ experimentId: expId as any, index: i });
-      acceptOk = true;
-    } catch (e: any) {
-      console.error("acceptProposal failed", e);
-      alert(`acceptProposal failed: ${e?.message ?? String(e)}`);
-    }
+                        let acceptOk = false;
+                        let impactOk = false;
+                        let emailResult: any = null;
 
-    try {
-      // 2) record a seed impact (don’t block email if this fails)
-      await recordImpact({
-        orgId,
-        experimentId: expId,
-        mrrDelta: 100,
-        notes: "Seed",
-      } as any);
-      impactOk = true;
-    } catch (e: any) {
-      console.error("recordImpact failed", e);
-      // keep going
-    }
+                        try {
+                          await acceptProposal({ experimentId: expId as any, index: i });
+                          acceptOk = true;
+                        } catch (e: any) {
+                          console.error("acceptProposal failed", e);
+                          alert(`acceptProposal failed: ${e?.message ?? String(e)}`);
+                        }
 
-    try {
-      // 3) send email via Convex action -> Resend
-      emailResult = await sendAccepted({
-        to: devEmail, // <= ALWAYS send to your resolved email
-        title: p?.title ?? "Accepted proposal",
-        metric: p?.metric ?? "MRR",
-        delta: 100,
-        appUrl:
-          typeof window !== "undefined"
-            ? window.location.origin
-            : "https://pricecraft.vercel.app",
-      } as any);
-    } catch (e: any) {
-      emailResult = { ok: false, reason: `throw: ${e?.message ?? String(e)}` };
-    }
+                        try {
+                          await recordImpact({
+                            orgId,
+                            experimentId: expId,
+                            mrrDelta: delta,
+                            notes: "Seed",
+                          } as any);
+                          impactOk = true;
+                        } catch (e: any) {
+                          console.error("recordImpact failed", e);
+                          // non-blocking
+                        }
 
-    // Summarize outcome
-    const msg = [
-      `accept: ${acceptOk ? "ok" : "failed"}`,
-      `impact: ${impactOk ? "ok" : "failed"}`,
-      `email: ${emailResult?.ok ? "ok" : `failed (${emailResult?.reason ?? "unknown"})`}`,
-      emailResult?.body ? `\n${emailResult.body}` : "",
-    ].join(" | ");
+                        try {
+                          emailResult = await sendAccepted({
+                            to: devEmail,
+                            title: p?.title ?? "Accepted proposal",
+                            metric: p?.metric ?? "MRR",
+                            delta,
+                            appUrl:
+                              typeof window !== "undefined"
+                                ? window.location.origin
+                                : "https://pricecraft.vercel.app",
+                          } as any);
+                        } catch (e: any) {
+                          emailResult = { ok: false, reason: `throw: ${e?.message ?? String(e)}` };
+                        }
 
-    alert(msg);
+                        const msg = [
+                          `accept: ${acceptOk ? "ok" : "failed"}`,
+                          `impact: ${impactOk ? "ok" : "failed"}`,
+                          `email: ${emailResult?.ok ? "ok" : `failed (${emailResult?.reason ?? "unknown"})`}`,
+                          emailResult?.body ? `\n${emailResult.body}` : "",
+                        ].join(" | ");
 
-    if (acceptOk) setProposals(null);
-  }}
->
-  Accept
-</button>
+                        alert(msg);
 
+                        if (acceptOk) setProposals(null);
+                      }}
+                    >
+                      Accept
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
           </section>
 
-          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+          {/* Recent proposals */}
+          <section style={panelStyle}>
             <h3>Recent proposals</h3>
             <ul style={{ marginTop: 8 }}>
               {experiments.map((e) => (
@@ -319,7 +410,8 @@ export default function Page() {
             </ul>
           </section>
 
-          <section style={{ marginTop: 16, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+          {/* Impact */}
+          <section style={panelStyle}>
             <h3>Impact</h3>
             <ul style={{ marginTop: 8 }}>
               {impacts.map((i) => (

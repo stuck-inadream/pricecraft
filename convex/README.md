@@ -1,91 +1,127 @@
 # Pricecraft
 
-Pricecraft turns competitor pricing pages into actionable experiments for your own pricing.
+**Live:** https://pricecraft.vercel.app  
+**Repo:** (this repo)  
+**Demo video:** 60–120s showing: crawl → propose → accept → email → impact
 
-Paste a competitor URL, crawl and parse it, auto-generate experiment ideas using OpenAI or a safe fallback, accept one with a click, and seed an impact snapshot to close the loop from external signal to internal action.
+Pricecraft turns competitor pricing pages into **actionable experiments** for your own pricing. Paste a URL, crawl & parse it, let the LLM propose ideas, accept one, and seed an impact snapshot—closing the loop from **external signal → internal action**.
+
+---
 
 ## What it shows
 
-1. Crawl competitor pricing pages.
-2. Parse simple signals such as prices and plan labels.
-3. Propose experiments using OpenAI when a key is present or use a deterministic fallback.
-4. Accept a proposal to create an experiment row.
-5. Seed a lightweight impact snapshot to start the tracking loop.
+1. Crawl competitor pricing pages (e.g. `vercel.com/pricing`).
+2. Parse simple signals (prices, plan labels) into findings.
+3. Propose experiments via **OpenAI** (or a deterministic fallback).
+4. Accept a proposal → create an experiment row.
+5. Record a seed **Impact** snapshot (e.g., +$100 MRR).
+6. **Email notification** via **Resend** when you accept.
 
-## Why now
+---
 
-• Competitor pricing shifts frequently and teams respond slowly.  
-• Product teams want hypotheses grounded in real external signals.  
-• Convex and LLMs make this loop feasible in hours instead of weeks.
+## Stack / Sponsors
+
+- **Convex** — DB, queries, mutations, and actions (core app logic)  
+- **Next.js 15** — UI (deployed on **Vercel**)  
+- **Firecrawl** — scrape competitor pricing pages  
+- **OpenAI** — LLM proposal generation (optional; has fallback)  
+- **Resend** — transactional email on proposal acceptance
+
+---
 
 ## Architecture
 
-• Next.js 15 front end with Convex client hooks.  
-• Convex functions:
-  • `crawls.runCrawl` action calls `fetchAndParse` and writes `crawlRuns` plus `priceFindings`.  
-  • `experiments.generateProposals` action calls OpenAI or returns a fallback.  
-  • `experiments.proposeExperiment` action writes an `experiments` row.  
-  • `experiments.acceptProposal` mutation promotes a chosen idea.  
-  • `impacts.recordSnapshot` and `impacts.listRecent` manage the simple impact feed.  
-• Optional keys keep the demo working without external services.
+- Next.js app uses `convex/react` hooks.
+- Convex functions:
+  - `crawls.runCrawl` → fetch & parse → `priceFindings`
+  - `experiments.proposeExperiment` → OpenAI (or fallback) ideas
+  - `experiments.acceptProposal` → promote chosen idea
+  - `impacts.recordSnapshot` / `impacts.listRecent` → simple impact feed
+  - `emails.sendProposalAcceptedEmail` → Resend API
+
+---
 
 ## Quick start
 
-1. Clone the repo and install  
+```bash
+# 1) deps
 npm i
 
-2. Start Convex and Next in separate terminals  
-npx convex dev
-npm run dev
+# 2) run dev (two terminals)
+npx convex dev           # terminal 1 (Convex)
+npm run dev              # terminal 2 (Next.js)
+````
 
-3. Dev identity  
-The app hardcodes `sarandahalitaj@gmail.com` during development. On first load click **Create dev user**. This creates a dev org and user if missing.
+**Dev identity:** the app defaults to `sarandahalitaj@gmail.com` locally. On first load click **Create dev user** to create a dev org/user.
 
-4. Optional keys in `.env.local`  
+**Optional `.env.local`:**
+
+```bash
 OPENAI_API_KEY=...
+NEXT_PUBLIC_DEV_EMAIL=your@email.com
+```
+
+**Convex env (Dev + Prod) — set in the Convex dashboard:**
+
+```bash
 RESEND_API_KEY=...
-RESEND_FROM=...
+```
 
-The app proposes experiments with a deterministic fallback when OpenAI is not configured.
+The app still works without OpenAI (deterministic proposals).
 
-## Demo script
+---
 
-1. Add target and crawl  
-• URL: `https://vercel.com/pricing`  
-• Label: Vercel  
-• Click **Add and crawl**. A finding appears.
+## Demo script (what judges will see)
 
-2. Propose  
-• Click **Propose from latest finding**.  
-• Two to three experiment ideas appear.
+1. **Add target and crawl**
 
-3. Accept  
-• Click **Accept** on one idea.  
-• **Recent proposals** shows the accepted experiment.  
-• **Impact** shows a seeded entry.
+* URL: `https://vercel.com/pricing`
+* Label: `Vercel`
+* Click **Add and crawl** → a finding appears.
 
-## Screenshots to include
+2. **Propose**
 
-1. Findings list with one item expanded showing parsed prices and source.  
-2. Experiment ideas list just after proposing.  
-3. Recent proposals with status accepted and the Impact section with the seed.
+* Click **Propose from latest finding**
+* 2–3 experiment ideas appear.
+
+3. **Accept**
+
+* Click **Accept** on one idea
+* **Recent proposals** shows it
+* **Impact** shows a seeded entry
+* **Email** delivered via **Resend**
+
+---
+
+## Screenshots (optional)
+
+* Findings list (expanded with parsed prices & source)
+* Experiment ideas (after Propose)
+* Recent proposals + Impact section
+* Resend dashboard showing delivered email
+
+---
 
 ## Notes for reviewers
 
-• The app is intentionally tiny and readable.  
-• Works without OpenAI by returning a consistent set of proposals.  
-• Data model is minimal and easy to adapt for a real product.
+* Tiny, readable code; minimal schema.
+* Works without OpenAI via fallback proposals.
+* Easy to extend with richer parsers or real revenue sources.
 
-## What is next
+---
 
-• Rich per-competitor parsers with CSS selectors and change diffs over time.  
-• Real impact ingestion from Stripe or RevenueCat instead of a seed.  
-• Multi-org auth, roles, and Slack or email nudges.  
-• Experiment templates by vertical.
+## What’s next
+
+* Diffing & alerts on competitor price changes
+* Real impact ingestion (Stripe/RevenueCat)
+* Multi-org auth & Slack/email nudges
+* Experiment templates by vertical
+
+---
 
 ## Troubleshooting
 
-• If **Create dev user** appears to do nothing, restart both processes and try again:  
-`npx convex dev` and `npm run dev`.  
-• If you created duplicates for the same email earlier, the app now tolerates them. There is also a one-shot cleanup mutation `auth.cleanDuplicateUsers` you can call once if you wish.
+* If **Create dev user** seems stuck, restart both processes:
 
+  * `npx convex dev` and `npm run dev`
+* Duplicates from old dev sessions are tolerated; a one-shot cleanup `auth.cleanDuplicateUsers` exists if needed.
